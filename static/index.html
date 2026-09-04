@@ -20,6 +20,7 @@
   </div>
   <div class="badges">
     <span id="modelBadge" class="badge badge-model">seedance 2.5</span>
+    <span id="svdBadge" class="badge badge-model">SVD</span>
     <span id="modeBadge" class="badge badge-demo">mode demo</span>
   </div>
 </header>
@@ -30,6 +31,12 @@
       <h2>Buat Video Baru</h2>
       <span class="hint">didukung audio asli &amp; durasi hingga 30 detik</span>
     </div>
+
+    <label class="field-label" for="provider">Model / Provider</label>
+    <select id="provider">
+      <option value="seedance" selected>Seedance 2.5 &middot; text-to-video (audio asli)</option>
+      <option value="svd">Stable Video Diffusion &middot; image-to-video</option>
+    </select>
 
     <label class="field-label" for="prompt">Prompt / Skenario</label>
     <div class="prompt-wrap">

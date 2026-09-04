@@ -9,6 +9,7 @@ function byId(id) { return document.getElementById(id); }
 var els = {};
 els.prompt = byId('prompt');
 els.promptCount = byId('promptCount');
+els.provider = byId('provider');
 els.duration = byId('duration');
 els.resolution = byId('resolution');
 els.ratio = byId('ratio');
@@ -92,13 +93,72 @@ els.modelBadge.textContent = cfg.model;
 if (cfg.demo_mode) {
 els.modeBadge.textContent = 'mode demo';
 els.modeBadge.className = 'badge badge-demo';
-els.footerMode.textContent = 'Mode demo aktif. Atur ARK_API_KEY server untuk video asli.';
+els.footerMode.textContent = 'Mode demo aktif. Atur API key server untuk video asli.';
 } else {
 els.modeBadge.textContent = 'mode live';
 els.modeBadge.className = 'badge badge-live';
-els.footerMode.textContent = 'Terhubung ke BytePlus ModelArk' + ' dengan ' + cfg.model + '.';
+els.footerMode.textContent = 'Terhubung ke ' + cfg.model + '.';
+}
+if (cfg.svd) {
+var svdBadge = document.getElementById('svdBadge');
+if (svdBadge) {
+if (cfg.svd.demo) {
+svdBadge.textContent = 'SVD: demo';
+} else if (cfg.svd.nvidia_nim) {
+svdBadge.textContent = 'SVD: NVIDIA NIM';
+} else if (cfg.svd.local_diffusers) {
+svdBadge.textContent = 'SVD: local';
+} else {
+svdBadge.textContent = 'SVD: tidak tersedia';
+}
+}
 }
 } catch (err) { console.warn('config gagal', err); }
+}
+async function handleGenerate() {
+var prompt = els.prompt.value.trim();
+if (prompt.length === 0 && !state.firstFrameUrl) {
+setError('Isi prompt atau unggah gambar terlebih dahulu.');
+els.prompt.focus();
+return;
+}
+setError(null);
+setButtonLoading(true);
+setProgress(true, 2, 'Mengirim permintaan...');
+var payload = {};
+payload.prompt = prompt;
+payload.provider = els.provider.value;
+payload.duration = parseInt(els.duration.value, 10) || 8;
+payload.resolution = els.resolution.value;
+payload.ratio = els.ratio.value;
+payload.generate_audio = els.generateAudio.checked;
+payload.watermark = els.watermark.checked;
+if (state.firstFrameUrl) {
+payload.first_frame_url = state.firstFrameUrl;
+}
+try {
+var res = await fetch('/api/generate', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify(payload),
+});
+var data = await res.json().catch(function () { return {}; });
+if (!res.ok) {
+var detail = data.detail;
+if (!detail) { detail = data.message; }
+if (!detail) { detail = 'HTTP ' + res.status; }
+throw new Error(detail);
+}
+state.taskId = data.id;
+state.demo = !!data.demo;
+startPolling(data.id);
+setProgress(true, 5, 'Task dibuat. Menunggu antrean...');
+loadHistory();
+} catch (err) {
+setButtonLoading(false);
+setProgress(false);
+setError(err.message);
+}
 }
 function startPolling(taskId) {
 stopPolling();
@@ -183,7 +243,7 @@ window.scrollTo({ top: 0, behavior: 'smooth' });
 return;
 }
 if (item.status === 'queued' || item.status === 'running') {
-state.taskId = item.id;i
+state.taskId = item.id;
 startPolling(item.id);
 setProgress(true, item.progress, 'Melanjutkan pemantauan...');
 } else if (item.error) {
