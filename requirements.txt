@@ -2,9 +2,4 @@ fastapi>=0.111
 uvicorn[standard]>=0.30
 httpx>=0.27
 python-multipart>=0.0.9
-
-# Optional: untuk SVD lokal (self-hosted) - butuh GPU
-# torch
-# diffusers>=0.27
-# transformers
-# pillow
+python-dotenv>=1.0

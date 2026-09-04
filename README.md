@@ -37,20 +37,29 @@ Aplikasi lengkap dengan **web UI** (FastAPI + vanilla JS), **API REST**, dan **C
 
 ## 🗂️ Struktur
 
+Pola arsitektur meniru [Volcengine ai-app-lab — chat2cartoon_en](https://github.com/volcengine/ai-app-lab/tree/main/demohouse/chat2cartoon_en):
+konfigurasi terpusat (`constants.py`), klien modular (`clients/`), dan main yang ramping.
+
 ```
 project/
 ├── backend/
-│   ├── main.py       # FastAPI app + routes (/api/*) + demo seedance
-│   └── svd.py        # SVD client (NVIDIA NIM / local diffusers / demo)
+│   ├── main.py           # FastAPI app + routes (/api/*) + demo seedance
+│   ├── config.py         # alias ke constants.py (backward-compat)
+│   ├── constants.py      # Konfigurasi terpusat dari .env (pola chat2cartoon)
+│   ├── svd.py            # re-export klien SVD (backward-compat)
+│   └── clients/          # klien modular (pola chat2cartoon/app/clients)
+│       ├── seedance.py   #   Seedance 2.5 client (create/poll/extract)
+│       ├── svd.py        #   SVD client (NVIDIA NIM / local / demo)
+│       └── downloader.py #   download media dari URL ke memory/file
 ├── static/
-│   ├── index.html    # UI web
+│   ├── index.html        # UI web
 │   ├── app.js
 │   └── style.css
-├── cli.py            # CLI tool
+├── cli.py                # CLI tool
 ├── requirements.txt
 ├── README.md
 ├── screenshots/
-└── data/             # history.json, uploads/
+└── data/                 # history.json, uploads/
 ```
 
 ---
@@ -155,6 +164,30 @@ Contoh `POST /api/generate` (SVD):
 - Seedance 1080p = H.265/HEVC 10-bit → gunakan pemutar modern (VLC/mpv) bila gagal.
 - SVD local butuh GPU ≥ 8GB VRAM (SVD-XT); tanpa itu gunakan demo/NVIDIA NIM.
 - `data/history.json` & `data/uploads/` adalah data lokal; hapus untuk reset.
+
+---
+
+## 🧩 Rujukan Arsitektur: Volcengine ai-app-lab / chat2cartoon_en
+
+Aplikasi ini mengadaptasi pola dari contoh resmi **Volcengine**:
+[`volcengine/ai-app-lab/demohouse/chat2cartoon_en`](https://github.com/volcengine/ai-app-lab/tree/main/demohouse/chat2cartoon_en)
+
+### Pola yang diadaptasi
+
+| Konsep chat2cartoon_en | Implementasi di aplikasi ini |
+|---|---|
+| `app/constants.py` — semua env dibaca terpusat | `backend/constants.py` |
+| `app/clients/*` — klien per-layanan (llm, t2i, tos, tts, vlm, downloader) | `backend/clients/` (seedance, svd, downloader) |
+| `app/generators/phases/video.py` — panggil video gen (create task → poll → download) | `backend/clients/seedance.py` (`create_task`, `get_task`, `extract_video_url`) |
+| `app/clients/downloader.py` — unduh media dari URL | `backend/clients/downloader.py` |
+| `.env` dengan endpoint & key terpusat | `.env` + `constants.py` |
+| async task + polling status | `GET /api/status/{task_id}` |
+
+### Perbedaan utama
+- **chat2cartoon** memakai **state machine multi-fase** (script → storyboard → role → first frame → video → audio → film) dengan SSE streaming lewat `/api/v3/bots/chat/completions`.
+- **Aplikasi ini** fokus pada **generasi video langsung** (Seedance 2.5 text-to-video & SVD image-to-video) dengan REST sederhana `/api/generate` — ideal untuk video maker yang tidak butuh pipeline cerita kompleks.
+
+> Jika ingin pipeline video cerita panjang (seperti chat2cartoon), saran: tambahkan fase-fase di `backend/generators/` dan frontend chat (SSE).
 
 ---
 
