@@ -29,6 +29,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import svd
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 STATIC_DIR = BASE_DIR / "static"
@@ -88,6 +90,7 @@ def _update_history(task_id: str, **fields: Any) -> None:
 # ------------------------------------------------------------------- api model --
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=2000)
+    provider: str = Field("seedance", pattern="^(seedance|svd)$")
     duration: int = Field(5, ge=4, le=30)
     resolution: str = Field("720p", pattern="^(480p|720p|1080p)$")
     ratio: str = Field("16:9", pattern="^(16:9|4:3|1:1|3:4|9:16|21:9|adaptive)$")
@@ -280,6 +283,47 @@ def demo_base64_fragment() -> str:
     return b64
 
 
+# ------------------------------------------------------------ SVD provider ---
+async def _generate_svd(req: GenerateRequest) -> StatusResponse:
+    """Handle an SVD (Stable Video Diffusion) generation request."""
+    if not req.first_frame_url:
+        raise HTTPException(status_code=422, detail="SVD memerlukan gambar awal (first_frame_url/upload gambar).")
+    if req.first_frame_url.startswith("/uploads/"):
+        image_path = DATA_DIR / req.first_frame_url.lstrip("/")
+        if not image_path.exists():
+            raise HTTPException(status_code=404, detail="Gambar upload tidak ditemukan.")
+        image_path = str(image_path)
+    elif req.first_frame_url.startswith(("http://", "https://")):
+        image_path = req.first_frame_url
+    else:
+        raise HTTPException(status_code=422, detail="SVD menerima URL upload lokal atau URL http(s).")
+
+    force_demo = req.demo if req.demo is not None else svd.demo_mode()
+
+    payload = {
+        "prompt": req.prompt.strip(),
+        "image_path": image_path,
+        "seed": 0,
+        "cfg_scale": 2.5,
+        "motion_bucket_id": 127,
+        "frames": 25,
+    }
+    task_id, entry = svd.create_task(payload)
+    entry["demo"] = force_demo
+    _append_history(entry)
+
+    if force_demo:
+        return StatusResponse(id=task_id, status="queued", demo=True, progress=5)
+
+    try:
+        remote_id = await svd.submit_task(entry)
+        _update_history(task_id, remote_id=remote_id, status="running", progress=45)
+        return StatusResponse(id=task_id, status="running", demo=False, progress=45)
+    except Exception as exc:  # noqa: BLE001
+        _update_history(task_id, status="failed")
+        raise HTTPException(status_code=502, detail=f"SVD submission failed: {exc}") from exc
+
+
 # ------------------------------------------------------------------ routes --
 @app.get("/api/health")
 async def health() -> dict:
@@ -295,11 +339,16 @@ async def config() -> dict:
         "resolutions": ["480p", "720p", "1080p"],
         "ratios": ["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"],
         "duration_range": [4, 30],
+        "providers": ["seedance", "svd"],
+        "svd": svd.provider_status(),
     }
 
 
 @app.post("/api/generate", response_model=StatusResponse)
 async def generate(req: GenerateRequest) -> StatusResponse:
+    if req.provider == "svd":
+        return await _generate_svd(req)
+
     key = _effective_key(req.api_key)
     force_demo = req.demo if req.demo is not None else DEMO_MODE
     if not key and not force_demo:
@@ -351,6 +400,20 @@ async def status(task_id: str, api_key: Optional[str] = None) -> StatusResponse:
     stored = next((item for item in _load_history() if item.get("id") == task_id), None)
     if stored and stored.get("demo"):
         return StatusResponse(**_demo_progress_status(task_id))
+    if stored and stored.get("provider") == "svd":
+        status_data = await svd.poll_task(stored)
+        _update_history(task_id, status=status_data.get("status"),
+                        video_url=status_data.get("video_url"),
+                        progress=status_data.get("progress"),
+                        updated_at=int(time.time()))
+        return StatusResponse(
+            id=task_id,
+            status=status_data.get("status", "unknown"),
+            video_url=status_data.get("video_url"),
+            error=status_data.get("error"),
+            demo=bool(stored.get("demo")),
+            progress=status_data.get("progress"),
+        )
 
     key = _effective_key(api_key if api_key else (stored or {}).get("api_key"))
     if not key:
