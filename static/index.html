@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Video Maker - Seedance 2.5</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="bg-glow" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">&#127916;</span>
+    <div>
+      <h1>AI<span>Video</span>Maker</h1>
+      <p class="tagline">Dreamina Seedance 2.5 &middot; BytePlus ModelArk</p>
+    </div>
+  </div>
+  <div class="badges">
+    <span id="modelBadge" class="badge badge-model">seedance 2.5</span>
+    <span id="modeBadge" class="badge badge-demo">mode demo</span>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="card editor" aria-label="Generator">
+    <div class="card-head">
+      <h2>Buat Video Baru</h2>
+      <span class="hint">didukung audio asli &amp; durasi hingga 30 detik</span>
+    </div>
+
+    <label class="field-label" for="prompt">Prompt / Skenario</label>
+    <div class="prompt-wrap">
+      <textarea id="prompt" rows="6" maxlength="2000" placeholder="Deskripsikan video yang ingin dibuat. Contoh: Seorang astronot melayang di dalam stasiun luar angkasa, cahaya biru lembut menerangi wajahnya, ia tersenyum dan berkata: &quot;Kita akhirnya sampai. Suasana sudah stabil.&quot;"></textarea>
+      <div class="prompt-meta">
+        <span id="promptCount">0 / 2000</span>
+        <span class="tip">Dialog pakai tanda kutip ganda agar lip-sync maksimal</span>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <label class="field">
+        <span class="field-label">Durasi (detik)</span>
+        <input type="number" id="duration" min="4" max="30" value="8">
+        <span class="range-labels"><span>4 detik</span><span>30 detik</span></span>
+      </label>
+      <label class="field">
+        <span class="field-label">Resolusi</span>
+        <select id="resolution">
+          <option value="480p">480p</option>
+          <option value="720p" selected>720p (default)</option>
+          <option value="1080p">1080p (10-bit HDR)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid-2">
+      <label class="field">
+        <span class="field-label">Rasio Aspek</span>
+        <select id="ratio">
+          <option value="16:9" selected>16:9 &middot; Landscape</option>
+          <option value="9:16">9:16 &middot; Portrait</option>
+          <option value="1:1">1:1 &middot; Square</option>
+          <option value="4:3">4:3</option>
+          <option value="3:4">3:4</option>
+          <option value="21:9">21:9 &middot; Cinematic</option>
+          <option value="adaptive">Adaptive</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">Input Gambar (opsional)</span>
+        <div class="file-row">
+          <label class="drop" for="imageInput">
+            <input type="file" id="imageInput" accept="image/*" hidden>
+            <span id="dropText">Klik / seret gambar pertama</span>
+          </label>
+          <button type="button" id="clearImage" class="btn-ghost" hidden title="Hapus gambar">&times;</button>
+        </div>
+        <p id="imageHint" class="micro-hint">Gambar publik juga bisa: tempel URL di prompt? Tidak - gunakan upload atau URL di bawah</p>
+        <input type="url" id="imageUrl" placeholder="Atau tempel URL gambar publik..." class="url-input">
+      </label>
+    </div>
+
+    <div class="toggles">
+      <label class="switch">
+        <input type="checkbox" id="generateAudio" checked>
+        <span class="slider"></span>
+        <span class="switch-label">Generate audio</span>
+      </label>
+      <label class="switch">
+        <input type="checkbox" id="watermark">
+        <span class="slider"></span>
+        <span class="switch-label">Watermark AI</span>
+      </label>
+    </div>
+
+    <button id="generateBtn" class="btn-primary">
+      <span class="btn-icon">&#9889;</span>
+      <span id="btnText">Generate Video</span>
+    </button>
+
+    <div id="errorBox" class="error-box" hidden></div>
+
+    <div id="progressWrap" class="progress-wrap" hidden>
+      <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+      <div class="progress-meta">
+        <span id="progressText">Antrean...</span>
+        <span id="progressPct">0%</span
+      </div>
+    </div>
+  </section>
+
+  <section class="card result" aria-label="Hasil">
+    <div class="card-head">
+      <h2>Hasil</h2>
+      <span class="hint" id="resultHint">Belum ada video</span>
+    </div>
+    <div id="videoWrap" class="video-wrap empty">
+      <video id="player" controls playsinline hidden></video>
+      <div id="emptyState" class="empty-state">
+        <span class="empty-icon">&#127909;</span>
+        <p>Tulis prompt lalu tekan <strong>Generate Video</strong>.</p>
+      </div>
+    </div>
+    <div class="result-actions" id="resultActions" hidden>
+      <a id="downloadBtn" class="btn-secondary" download>Download</a>
+      <button type="button" id="retryBtn" class="btn-ghost">Prompt serupa</button>
+      <span id="taskMeta" class="task-meta"></span>
+    </div>
+  </section>
+</main>
+
+<section class="card history" aria-label="Riwayat">
+  <div class="card-head">
+    <h2>Riwayat</h2>
+    <button type="button" id="refreshHistory" class="btn-ghost">Segarkan</button>
+  </div>
+  <div id="historyGrid" class="history-grid">
+    <div class="history-empty">Belum ada riwayat.</div
+  </div>
+</section>
+
+<footer class="footer">
+  <p>Aplikasi AI Video Maker memakai <strong>Dreamina Seedance 2.5</strong> via BytePlus ModelArk.</p>
+  <p id="footerMode"></p>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+data/history.json
+data/uploads/
+.venv/
+.env
