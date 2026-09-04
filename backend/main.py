@@ -23,27 +23,26 @@ from pathlib import Path
 from typing import Any, Optional
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import svd
+from . import constants, svd
+from .clients import seedance as seedance_client
+from .clients import svd as svd_client
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-STATIC_DIR = BASE_DIR / "static"
-HISTORY_FILE = DATA_DIR / "history.json"
+BASE_DIR = constants.BASE_DIR
+DATA_DIR = constants.DATA_DIR
+STATIC_DIR = constants.STATIC_DIR
+HISTORY_FILE = constants.HISTORY_FILE
 
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-STATIC_DIR.mkdir(parents=True, exist_ok=True)
-
-ARK_API_KEY = os.getenv("ARK_API_KEY", "").strip()
-ARK_BASE_URL = os.getenv("ARK_BASE_URL", "https://ark.ap-southeast.bytepluses.com/api/v3").rstrip("/")
-# Model ID for Dreamina Seedance 2.5 (check the Model list page in BytePlus console)
-SEEDANCE_2_5_MODEL = os.getenv("SEEDANCE_MODEL", "dreamina-seedance-2-5-260628")
-DEMO_MODE = not ARK_API_KEY
+ARK_API_KEY = constants.ARK_API_KEY
+ARK_BASE_URL = constants.ARK_BASE_URL
+SEEDANCE_2_5_MODEL = constants.SEEDANCE_MODEL
+DEMO_MODE = constants.DEMO_MODE
 
 app = FastAPI(title="AI Video Maker - Seedance 2.5", version="1.0.0")
 
@@ -149,51 +148,21 @@ def _build_contents(prompt: str, first_frame_url: Optional[str]) -> list[dict]:
 
 
 async def _create_remote_task(payload: dict, api_key: str) -> str:
-    url = f"{ARK_BASE_URL}/contents/generations/tasks"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    body = {
-        "model": payload["model"],
-        "content": _build_contents(payload["prompt"], payload.get("first_frame_url")),
-        "duration": payload["duration"],
-        "resolution": payload["resolution"],
-        "ratio": payload["ratio"],
-        "generate_audio": payload["generate_audio"],
-        "watermark": payload["watermark"],
-        "output_format": "mp4",
-    }
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, headers=headers, json=body)
-    if resp.status_code >= 400:
-        detail = resp.text[:1200]
-        try:
-            parsed = resp.json()
-            detail = parsed.get("error", {}).get("message", resp.text[:1200])
-        except Exception:
-            pass
-        raise HTTPException(status_code=resp.status_code, detail=f"ModelArk error: {detail}")
-    data = resp.json()
-    task_id = data.get("id")
-    if not task_id:
-        raise HTTPException(status_code=502, detail="ModelArk returned no task id.")
-    return task_id
+    client = seedance_client.SeedanceClient(api_key=api_key)
+    return await client.create_task(
+        prompt=payload["prompt"],
+        duration=payload["duration"],
+        resolution=payload["resolution"],
+        ratio=payload["ratio"],
+        generate_audio=payload["generate_audio"],
+        watermark=payload["watermark"],
+        first_frame_url=payload.get("first_frame_url"),
+    )
 
 
 async def _fetch_remote_status(task_id: str, api_key: str) -> dict:
-    url = f"{ARK_BASE_URL}/contents/generations/tasks/{task_id}"
-    headers = {"Authorization": f"Bearer {api_key}"}
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(url, headers=headers)
-    if resp.status_code == 404:
-        return {"status": "expired", "error": {"code": "NOT_FOUND", "message": "Task not found or expired."}}
-    if resp.status_code >= 400:
-        return {
-            "status": "failed",
-            "error": {"code": str(resp.status_code), "message": resp.text[:500]},
-        }
-    return resp.json()
+    client = seedance_client.SeedanceClient(api_key=api_key)
+    return await client.get_task(task_id)
 
 
 def _status_progress(status: str) -> Optional[int]:
