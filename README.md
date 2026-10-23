@@ -1,1 +1,32 @@
-Last updated: 2026-10-23 17:10:07 WIB
+# ok
+
+
+
+## 📋 Overview
+
+This repository contains **25 files** and is built with the following technologies:
+
+Not detected
+
+## 🚀 Quick Start
+
+```bash
+pip install -r requirements.txt
+python main.py
+```
+
+## ✨ Features
+
+- 🔧 Environment config included
+- 📝 Auto-generated documentation
+
+## 🛠️ Technologies
+
+Not detected
+
+## 📄 License
+
+MIT License
+
+---
+*Last updated: 2026-10-23 18:19:06 WIB*
